@@ -29,13 +29,22 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
   Future<void> _init() async {
     state = state.copyWith(isLoading: true);
-    await _storageService.init();
-    await loadMindMaps();
+    try {
+      await _storageService.init();
+      await loadMindMaps();
+    } catch (e) {
+      // Gracefully fall back to empty state on storage error
+      state = state.copyWith(mindMaps: [], isLoading: false);
+    }
   }
 
   Future<void> loadMindMaps() async {
-    final maps = await _storageService.getAllMindMaps();
-    state = state.copyWith(mindMaps: maps, isLoading: false);
+    try {
+      final maps = await _storageService.getAllMindMaps();
+      state = state.copyWith(mindMaps: maps, isLoading: false);
+    } catch (e) {
+      state = state.copyWith(mindMaps: [], isLoading: false);
+    }
   }
 
   Future<MindMap> createMindMap(String title) async {

@@ -1,27 +1,26 @@
 import 'dart:convert';
-import 'package:hive_flutter/hive_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mind_map.dart';
-import '../shared/constants.dart';
 
 class LocalStorageService {
-  late Box _box;
+  static const String _prefix = 'mindmap_';
+  static const String _keysKey = 'mindmap_keys';
+  SharedPreferences? _prefs;
 
   Future<void> init() async {
-    await Hive.initFlutter();
-    _box = await Hive.openBox(AppConstants.mindMapsBox);
+    _prefs = await SharedPreferences.getInstance();
   }
 
   Future<List<MindMap>> getAllMindMaps() async {
+    final prefs = _prefs!;
+    final keys = prefs.getStringList(_keysKey) ?? [];
     final maps = <MindMap>[];
-    for (final key in _box.keys) {
-      final jsonStr = _box.get(key) as String?;
+    for (final key in keys) {
+      final jsonStr = prefs.getString('$_prefix$key');
       if (jsonStr != null) {
         try {
-          final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-          maps.add(MindMap.fromJson(json));
-        } catch (_) {
-          // Skip corrupted entries
-        }
+          maps.add(MindMap.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>));
+        } catch (_) {}
       }
     }
     maps.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
@@ -29,26 +28,30 @@ class LocalStorageService {
   }
 
   Future<MindMap?> getMindMap(String id) async {
-    final jsonStr = _box.get(id) as String?;
+    final jsonStr = _prefs!.getString('$_prefix$id');
     if (jsonStr == null) return null;
     try {
-      final json = jsonDecode(jsonStr) as Map<String, dynamic>;
-      return MindMap.fromJson(json);
+      return MindMap.fromJson(jsonDecode(jsonStr) as Map<String, dynamic>);
     } catch (_) {
       return null;
     }
   }
 
   Future<void> saveMindMap(MindMap mindMap) async {
-    final jsonStr = jsonEncode(mindMap.toJson());
-    await _box.put(mindMap.id, jsonStr);
+    final prefs = _prefs!;
+    final keys = prefs.getStringList(_keysKey) ?? [];
+    if (!keys.contains(mindMap.id)) {
+      keys.add(mindMap.id);
+      await prefs.setStringList(_keysKey, keys);
+    }
+    await prefs.setString('$_prefix${mindMap.id}', jsonEncode(mindMap.toJson()));
   }
 
   Future<void> deleteMindMap(String id) async {
-    await _box.delete(id);
-  }
-
-  Future<void> close() async {
-    await _box.close();
+    final prefs = _prefs!;
+    final keys = prefs.getStringList(_keysKey) ?? [];
+    keys.remove(id);
+    await prefs.setStringList(_keysKey, keys);
+    await prefs.remove('$_prefix$id');
   }
 }
