@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const Color primary = Color(0xFF6200EE);
-  static const Color primaryVariant = Color(0xFF3700B3);
-  static const Color secondary = Color(0xFF03DAC6);
-  static const Color background = Color(0xFFF5F5F5);
-  static const Color canvasBackground = Color(0xFFFAFAFA);
+  static const Color primary = Color(0xFF007AFF); // iOS Blue
+  static const Color secondary = Color(0xFF34C759); // iOS Green
+  static const Color background = Color(0xFFF2F2F7); // iOS system background
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color error = Color(0xFFB00020);
+  static const Color error = Color(0xFFFF3B30); // iOS Red
 
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
@@ -17,28 +15,57 @@ class AppTheme {
           surface: surface,
           error: error,
         ),
-        appBarTheme: const AppBarTheme(
-          backgroundColor: primary,
-          foregroundColor: Colors.white,
+        scaffoldBackgroundColor: background,
+        appBarTheme: AppBarTheme(
+          backgroundColor: Colors.white.withAlpha(200),
+          foregroundColor: const Color(0xFF1C1C1E),
           elevation: 0,
+          centerTitle: true,
+          titleTextStyle: const TextStyle(
+            color: Color(0xFF1C1C1E),
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
         ),
-        floatingActionButtonTheme: const FloatingActionButtonThemeData(
+        floatingActionButtonTheme: FloatingActionButtonThemeData(
           backgroundColor: primary,
           foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 4,
         ),
         cardTheme: CardTheme(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          color: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: Colors.black.withAlpha(13)),
+          ),
+        ),
+        dialogTheme: DialogTheme(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+        ),
+        filledButtonTheme: FilledButtonThemeData(
+          style: FilledButton.styleFrom(
+            backgroundColor: primary,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.black.withAlpha(25)),
+          ),
+          filled: true,
+          fillColor: const Color(0xFFF2F2F7),
         ),
       );
 
-  static ThemeData get darkTheme => ThemeData(
-        useMaterial3: true,
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFFBB86FC),
-          secondary: secondary,
-          surface: Color(0xFF121212),
-          error: Color(0xFFCF6679),
-        ),
-      );
+  static ThemeData get darkTheme => lightTheme;
 }

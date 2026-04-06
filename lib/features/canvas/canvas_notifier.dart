@@ -66,8 +66,18 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
         (n) => n.id == parentId,
         orElse: () => state.mindMap.nodes.first,
       );
-      resolvedX = parent.x + 200;
-      resolvedY = parent.y + 80;
+      // Find existing children to avoid overlap
+      final siblings = state.mindMap.nodes
+          .where((n) => n.parentId == parentId)
+          .toList();
+      resolvedX = parent.x + 220;
+      if (siblings.isEmpty) {
+        resolvedY = parent.y;
+      } else {
+        // Place below the lowest sibling
+        final maxY = siblings.map((n) => n.y).reduce((a, b) => a > b ? a : b);
+        resolvedY = maxY + 75;
+      }
     }
     final node = MindNode(
       id: _uuid.v4(),
