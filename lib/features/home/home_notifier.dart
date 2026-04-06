@@ -51,8 +51,8 @@ class HomeNotifier extends StateNotifier<HomeState> {
     final rootNode = MindNode(
       id: _uuid.v4(),
       text: title,
-      x: 0,
-      y: 0,
+      x: 400,
+      y: 400,
       isRoot: true,
       style: NodeStyle(colorValue: 0xFF6200EE),
     );

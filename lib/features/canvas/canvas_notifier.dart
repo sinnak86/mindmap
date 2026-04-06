@@ -48,12 +48,23 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 
   // ─── Node Operations ───────────────────────────────────────────────────────
 
-  void addNode({double x = 0, double y = 0, String? parentId}) {
+  void addNode({double x = 400.0, double y = 400.0, String? parentId}) {
+    // If a parentId is given and no explicit position was provided, offset from parent
+    double resolvedX = x;
+    double resolvedY = y;
+    if (parentId != null && x == 400.0 && y == 400.0) {
+      final parent = state.mindMap.nodes.firstWhere(
+        (n) => n.id == parentId,
+        orElse: () => state.mindMap.nodes.first,
+      );
+      resolvedX = parent.x + 200;
+      resolvedY = parent.y + 80;
+    }
     final node = MindNode(
       id: _uuid.v4(),
       text: 'New Idea',
-      x: x,
-      y: y,
+      x: resolvedX,
+      y: resolvedY,
       parentId: parentId,
       style: NodeStyle(colorValue: NodeStyle.presetColors[
           state.mindMap.nodes.length % NodeStyle.presetColors.length]),

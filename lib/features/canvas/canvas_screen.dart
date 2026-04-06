@@ -31,11 +31,18 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
 
   void _centerView() {
     final size = MediaQuery.of(context).size;
-    final matrix = Matrix4.identity()
-      ..translate(
-        size.width / 2 - AppConstants.canvasSize / 2,
-        size.height / 2 - AppConstants.canvasSize / 2,
-      );
+    // Find the root node to center on
+    final nodes = widget.mindMap.nodes;
+    final rootNode = nodes.isNotEmpty
+        ? nodes.firstWhere((n) => n.isRoot, orElse: () => nodes.first)
+        : null;
+    final tx = rootNode != null
+        ? size.width / 2 - rootNode.x
+        : size.width / 2 - AppConstants.canvasSize / 2;
+    final ty = rootNode != null
+        ? size.height / 2 - rootNode.y
+        : size.height / 2 - AppConstants.canvasSize / 2;
+    final matrix = Matrix4.identity()..translate(tx, ty);
     _transformController.value = matrix;
   }
 
@@ -127,7 +134,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
               child: Stack(
                 children: [
                   // Canvas background
-                  Container(color: const Color(0xFFFAFAFA)),
+                  Container(color: Colors.white),
                   // Grid pattern
                   CustomPaint(
                     size: const Size(AppConstants.canvasSize, AppConstants.canvasSize),
@@ -145,10 +152,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                   // Draggable node overlays
                   ...canvasState.mindMap.nodes.map((node) {
                     return Positioned(
-                      left: node.x + AppConstants.canvasSize / 2 -
-                          AppConstants.nodeWidth / 2,
-                      top: node.y + AppConstants.canvasSize / 2 -
-                          AppConstants.nodeHeight / 2,
+                      left: node.x - AppConstants.nodeWidth / 2,
+                      top: node.y - AppConstants.nodeHeight / 2,
                       width: AppConstants.nodeWidth,
                       height: AppConstants.nodeHeight,
                       child: GestureDetector(
@@ -170,8 +175,6 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
         mindMap: widget.mindMap,
         selectedNodeId: canvasState.selectedNodeId,
         onAddNode: () => notifier.addNode(
-          x: 0,
-          y: 0,
           parentId: canvasState.selectedNodeId,
         ),
         onDeleteNode: canvasState.selectedNodeId != null
@@ -187,10 +190,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
     final inverse = Matrix4.inverted(matrix);
     final v = Vector3(localPosition.dx, localPosition.dy, 0);
     final transformed = inverse.transformed3(v);
-    return Offset(
-      transformed.x - AppConstants.canvasSize / 2,
-      transformed.y - AppConstants.canvasSize / 2,
-    );
+    return Offset(transformed.x, transformed.y);
   }
 
   MindNode? _findNodeAt(Offset pos, List<MindNode> nodes) {
