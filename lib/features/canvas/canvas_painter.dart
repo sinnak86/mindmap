@@ -18,6 +18,8 @@ class CanvasPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    // Shift origin to canvas center so model coordinate (0,0) = center of canvas widget
+    canvas.translate(size.width / 2, size.height / 2);
     _drawEdges(canvas);
     _drawNodes(canvas);
   }

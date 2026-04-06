@@ -54,6 +54,11 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
       appBar: AppBar(
         title: Text(canvasState.mindMap.title),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.center_focus_strong),
+            tooltip: 'Center view',
+            onPressed: _centerView,
+          ),
           if (canvasState.isDirty)
             IconButton(
               icon: const Icon(Icons.save),
