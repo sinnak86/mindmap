@@ -12,6 +12,16 @@ class HomeScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final homeState = ref.watch(homeProvider);
+    final notifier = ref.read(homeProvider.notifier);
+
+    // Maps to show: filtered by focused folder, or all maps
+    final allMaps = homeState.mindMaps.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final visibleMaps = homeState.focusedFolderId != null
+        ? allMaps
+            .where((m) => m.folderId == homeState.focusedFolderId)
+            .toList()
+        : allMaps;
 
     return Scaffold(
       appBar: AppBar(
@@ -33,12 +43,41 @@ class HomeScreen extends ConsumerWidget {
       ),
       body: homeState.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : homeState.folders.isEmpty && homeState.mindMaps.isEmpty
-              ? _buildEmptyState(context)
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: _buildTree(context, ref, homeState, null, 0),
-                ),
+          : ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                // ── Folders section ─────────────────────────────────────────
+                if (homeState.folders.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: homeState.folders.map((folder) {
+                      return _FolderTile(
+                        folder: folder,
+                        isFocused: homeState.focusedFolderId == folder.id,
+                        onTap: () =>
+                            notifier.toggleFolderFocus(folder.id),
+                        onDelete: () =>
+                            _confirmDeleteFolder(context, ref, folder),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.grey.shade200),
+                  const SizedBox(height: 8),
+                ],
+
+                // ── Maps section ────────────────────────────────────────────
+                if (visibleMaps.isEmpty && !homeState.isLoading)
+                  _buildEmptyMaps(context)
+                else
+                  ...visibleMaps.map((map) => _MindMapCard(
+                        mindMap: map,
+                        onTap: () => _openCanvas(context, ref, map),
+                        onDelete: () => notifier.deleteMindMap(map.id),
+                      )),
+              ],
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showCreateDialog(context, ref),
         icon: const Icon(Icons.add),
@@ -47,115 +86,20 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ── Tree builder ────────────────────────────────────────────────────────────
-  List<Widget> _buildTree(
-    BuildContext context,
-    WidgetRef ref,
-    HomeState state,
-    String? parentId,
-    int depth,
-  ) {
-    final widgets = <Widget>[];
-    final notifier = ref.read(homeProvider.notifier);
-    final foldersAtLevel =
-        state.folders.where((f) => f.parentId == parentId).toList();
-
-    for (final folder in foldersAtLevel) {
-      final isFocused = state.focusedFolderId == folder.id;
-      final mapsInFolder = state.mindMaps
-          .where((m) => m.folderId == folder.id)
-          .toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-
-      // Children (maps + subfolders) collected first
-      final childWidgets = <Widget>[];
-      for (final map in mapsInFolder) {
-        childWidgets.add(
-          _MindMapCard(
-            mindMap: map,
-            onTap: () => _openCanvas(context, ref, map),
-            onDelete: () => notifier.deleteMindMap(map.id),
-          ),
-        );
-      }
-      childWidgets.addAll(
-          _buildTree(context, ref, state, folder.id, depth + 1));
-
-      // Folder tile
-      widgets.add(
-        _FolderTile(
-          folder: folder,
-          isFocused: isFocused,
-          onTap: () => notifier.toggleFolderFocus(folder.id),
-          onDelete: () => _confirmDeleteFolder(context, ref, folder),
+  Widget _buildEmptyMaps(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.account_tree_outlined,
+                size: 60, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
+            Text('맵이 없습니다',
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
+          ],
         ),
-      );
-
-      // Children wrapped with hierarchy line
-      if (childWidgets.isNotEmpty) {
-        widgets.add(
-          Padding(
-            padding: const EdgeInsets.only(left: 20),
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Vertical connecting line
-                  Container(
-                    width: 2,
-                    margin: const EdgeInsets.only(bottom: 6),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          isFocused
-                              ? const Color(0xFF007AFF)
-                              : Colors.amber.shade400,
-                          (isFocused
-                                  ? const Color(0xFF007AFF)
-                                  : Colors.amber.shade400)
-                              .withAlpha(40),
-                        ],
-                      ),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: childWidgets,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    return widgets;
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-  Widget _buildEmptyState(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.account_tree_outlined,
-              size: 80, color: Colors.grey.shade400),
-          const SizedBox(height: 16),
-          Text('No mind maps yet',
-              style: Theme.of(context)
-                  .textTheme
-                  .titleLarge
-                  ?.copyWith(color: Colors.grey)),
-          const SizedBox(height: 8),
-          const Text('Tap the button below to create your first mind map'),
-        ],
       ),
     );
   }
@@ -262,7 +206,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Folder Tile ───────────────────────────────────────────────────────────────
+// ── Compact Folder Tile ───────────────────────────────────────────────────────
 
 class _FolderTile extends StatelessWidget {
   final MindFolder folder;
@@ -281,106 +225,103 @@ class _FolderTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final accentColor =
         isFocused ? const Color(0xFF007AFF) : Colors.amber.shade600;
+    final bgColor =
+        isFocused ? const Color(0xFFF0F6FF) : Colors.amber.shade50;
 
     return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ── Folder tab (top-left bump) ──────────────────────────────────
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-              decoration: BoxDecoration(
-                color: accentColor.withAlpha(isFocused ? 25 : 30),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(16),
-                ),
-                border: Border(
-                  top: BorderSide(color: accentColor.withAlpha(80), width: 1),
-                  left:
-                      BorderSide(color: accentColor.withAlpha(80), width: 1),
-                  right:
-                      BorderSide(color: accentColor.withAlpha(80), width: 1),
-                ),
-              ),
-              child: Text(
-                folder.name,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: accentColor,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-
-            // ── Folder body ─────────────────────────────────────────────────
-            _GradientBorderBox(
-              isActive: isFocused,
-              borderRadius: const BorderRadius.only(
-                topRight: Radius.circular(12),
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
-              child: Container(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Folder shape
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tab (decorative only, no text)
+              Container(
+                width: 44,
+                height: 9,
+                margin: const EdgeInsets.only(left: 6),
                 decoration: BoxDecoration(
-                  color: isFocused
-                      ? const Color(0xFFF0F6FF)
-                      : Colors.amber.shade50,
+                  color: accentColor.withAlpha(isFocused ? 60 : 50),
                   borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(11),
-                    bottomLeft: Radius.circular(11),
-                    bottomRight: Radius.circular(11),
+                    topLeft: Radius.circular(6),
+                    topRight: Radius.circular(10),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 14),
-                    Icon(
-                      isFocused
-                          ? Icons.folder_open_rounded
-                          : Icons.folder_rounded,
-                      color: accentColor,
-                      size: 26,
+              ),
+              // Body with gradient border when focused
+              _GradientBorderBox(
+                isActive: isFocused,
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+                child: Container(
+                  width: 90,
+                  padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+                  decoration: BoxDecoration(
+                    color: bgColor,
+                    borderRadius: const BorderRadius.only(
+                      topRight: Radius.circular(11),
+                      bottomLeft: Radius.circular(11),
+                      bottomRight: Radius.circular(11),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isFocused
+                            ? Icons.folder_open_rounded
+                            : Icons.folder_rounded,
+                        color: accentColor,
+                        size: 32,
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
                         folder.name,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
+                          fontSize: 12,
                           fontWeight: isFocused
                               ? FontWeight.w700
                               : FontWeight.w500,
-                          fontSize: 15,
                           color: isFocused
                               ? const Color(0xFF007AFF)
                               : const Color(0xFF1C1C1E),
                         ),
                       ),
-                    ),
-                    if (isFocused)
-                      Icon(Icons.check_circle,
-                          size: 16,
-                          color: const Color(0xFF007AFF).withAlpha(180)),
-                    if (folder.name != '기본')
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline,
-                            color: Colors.redAccent, size: 20),
-                        onPressed: onDelete,
-                      )
-                    else
-                      const SizedBox(width: 12),
-                  ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // Delete button (top-right, only for non-기본 folders)
+          if (folder.name != '기본')
+            Positioned(
+              top: -4,
+              right: -4,
+              child: GestureDetector(
+                onTap: onDelete,
+                child: Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close,
+                      size: 12, color: Colors.white),
                 ),
               ),
             ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -410,7 +351,6 @@ class _GradientBorderBox extends StatelessWidget {
         child: child,
       );
     }
-    // Gradient border: outer gradient container, inner content
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -423,7 +363,6 @@ class _GradientBorderBox extends StatelessWidget {
           BoxShadow(
             color: const Color(0xFF007AFF).withAlpha(60),
             blurRadius: 10,
-            spreadRadius: 0,
             offset: const Offset(0, 3),
           ),
         ],
@@ -473,14 +412,15 @@ class _MindMapCard extends StatelessWidget {
               color: Color(0xFF007AFF), size: 20),
         ),
         title: Text(mindMap.title,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            style:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: Text(
           '${mindMap.nodes.length} nodes · $dateStr',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
         ),
         trailing: IconButton(
-          icon:
-              const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
+          icon: const Icon(Icons.delete_outline,
+              color: Colors.redAccent, size: 20),
           onPressed: () => _confirmDelete(context),
         ),
         onTap: onTap,

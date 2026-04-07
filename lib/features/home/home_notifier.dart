@@ -82,7 +82,7 @@ class HomeNotifier extends StateNotifier<HomeState> {
     final folder = MindFolder(
       id: _uuid.v4(),
       name: name,
-      parentId: state.focusedFolderId, // null = root level
+      parentId: null, // always root level
       createdAt: DateTime.now(),
     );
     await _storageService.saveFolder(folder);
