@@ -47,6 +47,7 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
+  // ── Tree builder ────────────────────────────────────────────────────────────
   List<Widget> _buildTree(
     BuildContext context,
     WidgetRef ref,
@@ -54,10 +55,8 @@ class HomeScreen extends ConsumerWidget {
     String? parentId,
     int depth,
   ) {
-    final indent = depth * 16.0;
     final widgets = <Widget>[];
     final notifier = ref.read(homeProvider.notifier);
-
     final foldersAtLevel =
         state.folders.where((f) => f.parentId == parentId).toList();
 
@@ -68,54 +67,92 @@ class HomeScreen extends ConsumerWidget {
           .toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
-      // Folder row
-      widgets.add(
-        Padding(
-          padding: EdgeInsets.only(left: indent),
-          child: _FolderTile(
-            folder: folder,
-            isFocused: isFocused,
-            onTap: () => notifier.toggleFolderFocus(folder.id),
-            onDelete: () => _confirmDeleteFolder(context, ref, folder),
+      // Children (maps + subfolders) collected first
+      final childWidgets = <Widget>[];
+      for (final map in mapsInFolder) {
+        childWidgets.add(
+          _MindMapCard(
+            mindMap: map,
+            onTap: () => _openCanvas(context, ref, map),
+            onDelete: () => notifier.deleteMindMap(map.id),
           ),
+        );
+      }
+      childWidgets.addAll(
+          _buildTree(context, ref, state, folder.id, depth + 1));
+
+      // Folder tile
+      widgets.add(
+        _FolderTile(
+          folder: folder,
+          isFocused: isFocused,
+          onTap: () => notifier.toggleFolderFocus(folder.id),
+          onDelete: () => _confirmDeleteFolder(context, ref, folder),
         ),
       );
 
-      // Maps inside folder
-      for (final map in mapsInFolder) {
+      // Children wrapped with hierarchy line
+      if (childWidgets.isNotEmpty) {
         widgets.add(
           Padding(
-            padding: EdgeInsets.only(left: indent + 16.0),
-            child: _MindMapCard(
-              mindMap: map,
-              onTap: () => _openCanvas(context, ref, map),
-              onDelete: () => notifier.deleteMindMap(map.id),
+            padding: const EdgeInsets.only(left: 20),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Vertical connecting line
+                  Container(
+                    width: 2,
+                    margin: const EdgeInsets.only(bottom: 6),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          isFocused
+                              ? const Color(0xFF007AFF)
+                              : Colors.amber.shade400,
+                          (isFocused
+                                  ? const Color(0xFF007AFF)
+                                  : Colors.amber.shade400)
+                              .withAlpha(40),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: childWidgets,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
       }
-
-      // Subfolders (recursive)
-      widgets.addAll(_buildTree(context, ref, state, folder.id, depth + 1));
     }
 
     return widgets;
   }
 
+  // ── Helpers ─────────────────────────────────────────────────────────────────
   Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.account_tree_outlined, size: 80, color: Colors.grey.shade400),
+          Icon(Icons.account_tree_outlined,
+              size: 80, color: Colors.grey.shade400),
           const SizedBox(height: 16),
-          Text(
-            'No mind maps yet',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(color: Colors.grey),
-          ),
+          Text('No mind maps yet',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleLarge
+                  ?.copyWith(color: Colors.grey)),
           const SizedBox(height: 8),
           const Text('Tap the button below to create your first mind map'),
         ],
@@ -146,13 +183,11 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel')),
           FilledButton(
-            onPressed: () => _create(ctx, ref, controller.text),
-            child: const Text('Create'),
-          ),
+              onPressed: () => _create(ctx, ref, controller.text),
+              child: const Text('Create')),
         ],
       ),
     );
@@ -166,7 +201,8 @@ class HomeScreen extends ConsumerWidget {
         await ref.read(homeProvider.notifier).createMindMap(title.trim());
     if (context.mounted) {
       Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => CanvasScreen(mindMap: mindMap)))
+          .push(
+              MaterialPageRoute(builder: (_) => CanvasScreen(mindMap: mindMap)))
           .then((_) => ref.read(homeProvider.notifier).loadAll());
     }
   }
@@ -185,13 +221,11 @@ class HomeScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('취소'),
-          ),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('취소')),
           FilledButton(
-            onPressed: () => _createFolder(ctx, ref, controller.text),
-            child: const Text('생성'),
-          ),
+              onPressed: () => _createFolder(ctx, ref, controller.text),
+              child: const Text('생성')),
         ],
       ),
     );
@@ -212,9 +246,8 @@ class HomeScreen extends ConsumerWidget {
         content: Text('"${folder.name}" 폴더와 포함된 모든 맵을 삭제하시겠습니까?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('취소'),
-          ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('취소')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
@@ -229,7 +262,7 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ─── Folder Tile ──────────────────────────────────────────────────────────────
+// ── Folder Tile ───────────────────────────────────────────────────────────────
 
 class _FolderTile extends StatelessWidget {
   final MindFolder folder;
@@ -246,36 +279,169 @@ class _FolderTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Card(
-      color: isFocused ? scheme.primaryContainer : null,
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        leading: Icon(
-          Icons.folder_rounded,
-          color: isFocused ? scheme.primary : Colors.amber.shade600,
-          size: 28,
-        ),
-        title: Text(
-          folder.name,
-          style: TextStyle(
-            fontWeight: isFocused ? FontWeight.bold : FontWeight.w500,
-            color: isFocused ? scheme.primary : null,
-          ),
-        ),
-        trailing: folder.name == '기본'
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: onDelete,
+    final accentColor =
+        isFocused ? const Color(0xFF007AFF) : Colors.amber.shade600;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Folder tab (top-left bump) ──────────────────────────────────
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: accentColor.withAlpha(isFocused ? 25 : 30),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(8),
+                  topRight: Radius.circular(16),
+                ),
+                border: Border(
+                  top: BorderSide(color: accentColor.withAlpha(80), width: 1),
+                  left:
+                      BorderSide(color: accentColor.withAlpha(80), width: 1),
+                  right:
+                      BorderSide(color: accentColor.withAlpha(80), width: 1),
+                ),
               ),
-        onTap: onTap,
+              child: Text(
+                folder.name,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: accentColor,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+
+            // ── Folder body ─────────────────────────────────────────────────
+            _GradientBorderBox(
+              isActive: isFocused,
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: isFocused
+                      ? const Color(0xFFF0F6FF)
+                      : Colors.amber.shade50,
+                  borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(11),
+                    bottomLeft: Radius.circular(11),
+                    bottomRight: Radius.circular(11),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 14),
+                    Icon(
+                      isFocused
+                          ? Icons.folder_open_rounded
+                          : Icons.folder_rounded,
+                      color: accentColor,
+                      size: 26,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        folder.name,
+                        style: TextStyle(
+                          fontWeight: isFocused
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                          fontSize: 15,
+                          color: isFocused
+                              ? const Color(0xFF007AFF)
+                              : const Color(0xFF1C1C1E),
+                        ),
+                      ),
+                    ),
+                    if (isFocused)
+                      Icon(Icons.check_circle,
+                          size: 16,
+                          color: const Color(0xFF007AFF).withAlpha(180)),
+                    if (folder.name != '기본')
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline,
+                            color: Colors.redAccent, size: 20),
+                        onPressed: onDelete,
+                      )
+                    else
+                      const SizedBox(width: 12),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── MindMap Card ─────────────────────────────────────────────────────────────
+// ── Gradient Border Box ───────────────────────────────────────────────────────
+
+class _GradientBorderBox extends StatelessWidget {
+  final Widget child;
+  final bool isActive;
+  final BorderRadius borderRadius;
+
+  const _GradientBorderBox({
+    required this.child,
+    required this.isActive,
+    required this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isActive) {
+      return Container(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          border: Border.all(color: Colors.amber.shade300, width: 1),
+        ),
+        child: child,
+      );
+    }
+    // Gradient border: outer gradient container, inner content
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF007AFF), Color(0xFF5856D6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF007AFF).withAlpha(60),
+            blurRadius: 10,
+            spreadRadius: 0,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(2),
+      child: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topRight: Radius.circular(borderRadius.topRight.x - 2),
+          bottomLeft: Radius.circular(borderRadius.bottomLeft.x - 2),
+          bottomRight: Radius.circular(borderRadius.bottomRight.x - 2),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+// ── MindMap Card ──────────────────────────────────────────────────────────────
 
 class _MindMapCard extends StatelessWidget {
   final MindMap mindMap;
@@ -295,27 +461,26 @@ class _MindMapCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
         leading: Container(
-          width: 44,
-          height: 44,
+          width: 40,
+          height: 40,
           decoration: BoxDecoration(
             color: const Color(0xFF007AFF).withAlpha(20),
             borderRadius: BorderRadius.circular(10),
           ),
           child: const Icon(Icons.account_tree,
-              color: Color(0xFF007AFF), size: 22),
+              color: Color(0xFF007AFF), size: 20),
         ),
-        title: Text(
-          mindMap.title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
+        title: Text(mindMap.title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: Text(
           '${mindMap.nodes.length} nodes · $dateStr',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
         ),
         trailing: IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+          icon:
+              const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
           onPressed: () => _confirmDelete(context),
         ),
         onTap: onTap,
@@ -331,9 +496,8 @@ class _MindMapCard extends StatelessWidget {
         content: Text('Delete "${mindMap.title}"? This cannot be undone.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Cancel'),
-          ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () {
