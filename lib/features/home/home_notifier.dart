@@ -78,16 +78,31 @@ class HomeNotifier extends StateNotifier<HomeState> {
     }
   }
 
+  static const int maxFolders = 9;
+
   Future<MindFolder> createFolder(String name) async {
+    if (state.folders.length >= maxFolders) return state.folders.first;
     final folder = MindFolder(
       id: _uuid.v4(),
       name: name,
-      parentId: null, // always root level
+      parentId: null,
       createdAt: DateTime.now(),
     );
     await _storageService.saveFolder(folder);
     await loadAll();
     return folder;
+  }
+
+  Future<void> renameFolder(String id, String name) async {
+    final folder = state.folders.firstWhere((f) => f.id == id);
+    await _storageService.saveFolder(folder.copyWith(name: name));
+    await loadAll();
+  }
+
+  Future<void> updateFolderColor(String id, int colorValue) async {
+    final folder = state.folders.firstWhere((f) => f.id == id);
+    await _storageService.saveFolder(folder.copyWith(colorValue: colorValue));
+    await loadAll();
   }
 
   Future<void> deleteFolder(String id) async {
