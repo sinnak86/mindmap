@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:vector_math/vector_math_64.dart' show Vector3;
+import 'package:vector_math/vector_math_64.dart' show Vector3, Matrix4;
 import '../../models/mind_map.dart';
 import '../../models/mind_node.dart';
 import '../../shared/constants.dart';
@@ -25,17 +26,34 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   final GlobalKey _repaintKey = GlobalKey();
 
   String? _dragNodeId;
+  Timer? _saveTransformTimer;
 
   @override
   void initState() {
     super.initState();
     _transformController.addListener(_onTransformChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _centerView());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreOrCenterView());
   }
 
   void _onTransformChanged() {
-    // Rebuild so the infinite grid repaints with new transform
     setState(() {});
+    // Debounce: save transform 800ms after last change
+    _saveTransformTimer?.cancel();
+    _saveTransformTimer = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      final matrix = _transformController.value.storage.toList();
+      ref.read(canvasProvider(widget.mindMap).notifier).saveViewTransform(matrix);
+    });
+  }
+
+  void _restoreOrCenterView() {
+    if (!mounted) return;
+    final saved = widget.mindMap.viewTransform;
+    if (saved != null && saved.length == 16) {
+      _transformController.value = Matrix4.fromList(saved);
+    } else {
+      _centerView();
+    }
   }
 
   void _centerView() {
@@ -56,6 +74,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
 
   @override
   void dispose() {
+    _saveTransformTimer?.cancel();
     _transformController.removeListener(_onTransformChanged);
     _transformController.dispose();
     super.dispose();

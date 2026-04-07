@@ -9,7 +9,7 @@ class NodeStyle {
   final int textColorValue;
 
   const NodeStyle({
-    this.colorValue = 0xFF4CAF50,
+    this.colorValue = 0xFF8E8E93, // iOS Grey (default)
     this.shapeIndex = 1,
     this.fontSize = 14.0,
     this.textColorValue = 0xFFFFFFFF,
@@ -48,6 +48,7 @@ class NodeStyle {
       );
 
   static List<int> get presetColors => [
+        0xFF8E8E93, // iOS Grey (default)
         0xFF007AFF, // iOS Blue
         0xFF34C759, // iOS Green
         0xFFFF9500, // iOS Orange

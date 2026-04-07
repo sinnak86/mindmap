@@ -9,6 +9,7 @@ class MindMap {
   final DateTime createdAt;
   final DateTime updatedAt;
   final String? userId;
+  final List<double>? viewTransform; // Matrix4 storage (16 values)
 
   MindMap({
     required this.id,
@@ -18,6 +19,7 @@ class MindMap {
     DateTime? createdAt,
     DateTime? updatedAt,
     this.userId,
+    this.viewTransform,
   })  : nodes = nodes ?? [],
         edges = edges ?? [],
         createdAt = createdAt ?? DateTime.now(),
@@ -31,6 +33,7 @@ class MindMap {
     DateTime? createdAt,
     DateTime? updatedAt,
     String? userId,
+    List<double>? viewTransform,
   }) {
     return MindMap(
       id: id ?? this.id,
@@ -40,6 +43,7 @@ class MindMap {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
       userId: userId ?? this.userId,
+      viewTransform: viewTransform ?? this.viewTransform,
     );
   }
 
@@ -51,6 +55,7 @@ class MindMap {
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
         'userId': userId,
+        'viewTransform': viewTransform,
       };
 
   factory MindMap.fromJson(Map<String, dynamic> json) => MindMap(
@@ -65,5 +70,8 @@ class MindMap {
         createdAt: DateTime.parse(json['createdAt'] as String),
         updatedAt: DateTime.parse(json['updatedAt'] as String),
         userId: json['userId'] as String?,
+        viewTransform: (json['viewTransform'] as List<dynamic>?)
+            ?.map((v) => (v as num).toDouble())
+            .toList(),
       );
 }

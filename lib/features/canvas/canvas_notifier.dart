@@ -114,7 +114,7 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
     state = state.copyWith(
       mindMap: finalMap,
       // Keep parent selected when adding a child; only select new node if it's standalone
-      selectedNodeId: parentId != null ? parentId : node.id,
+      selectedNodeId: parentId ?? node.id,
       isDirty: true,
     );
     _autoSave();
@@ -240,6 +240,15 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
       isDirty: true,
     );
     _autoSave();
+  }
+
+  // ─── View Transform ────────────────────────────────────────────────────────
+
+  void saveViewTransform(List<double> matrix) {
+    state = state.copyWith(
+      mindMap: state.mindMap.copyWith(viewTransform: matrix),
+    );
+    _storageService.saveMindMap(state.mindMap).catchError((_) {});
   }
 
   // ─── Persistence ───────────────────────────────────────────────────────────
