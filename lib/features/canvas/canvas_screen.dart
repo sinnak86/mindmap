@@ -212,8 +212,13 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
       floatingActionButton: ToolbarWidget(
         mindMap: widget.mindMap,
         selectedNodeId: canvasState.selectedNodeId,
-        onAddNode: () => notifier.addNode(
+        onAddNodeLeft: () => notifier.addNode(
           parentId: canvasState.selectedNodeId,
+          direction: 'left',
+        ),
+        onAddNodeRight: () => notifier.addNode(
+          parentId: canvasState.selectedNodeId,
+          direction: 'right',
         ),
         onDeleteNode: canvasState.selectedNodeId != null
             ? () => notifier.deleteNode(canvasState.selectedNodeId!)

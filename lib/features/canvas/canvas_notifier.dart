@@ -57,8 +57,12 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
 
   // ─── Node Operations ───────────────────────────────────────────────────────
 
-  void addNode({double x = 400.0, double y = 400.0, String? parentId}) {
-    // If a parentId is given and no explicit position was provided, offset from parent
+  void addNode({
+    double x = 400.0,
+    double y = 400.0,
+    String? parentId,
+    String direction = 'right', // 'left' or 'right'
+  }) {
     double resolvedX = x;
     double resolvedY = y;
     if (parentId != null && x == 400.0 && y == 400.0) {
@@ -66,15 +70,16 @@ class CanvasNotifier extends StateNotifier<CanvasState> {
         (n) => n.id == parentId,
         orElse: () => state.mindMap.nodes.first,
       );
-      // Find existing children to avoid overlap
-      final siblings = state.mindMap.nodes
-          .where((n) => n.parentId == parentId)
-          .toList();
-      resolvedX = parent.x + 220;
+      final offsetX = direction == 'left' ? -220.0 : 220.0;
+      // Find siblings in the same direction to avoid overlap
+      final siblings = state.mindMap.nodes.where((n) {
+        if (n.parentId != parentId) return false;
+        return direction == 'left' ? n.x < parent.x : n.x >= parent.x;
+      }).toList();
+      resolvedX = parent.x + offsetX;
       if (siblings.isEmpty) {
         resolvedY = parent.y;
       } else {
-        // Place below the lowest sibling
         final maxY = siblings.map((n) => n.y).reduce((a, b) => a > b ? a : b);
         resolvedY = maxY + 75;
       }
