@@ -149,6 +149,12 @@ class HomeNotifier extends StateNotifier<HomeState> {
     return mindMap;
   }
 
+  Future<void> moveMapToFolder(String mapId, String folderId) async {
+    final map = state.mindMaps.firstWhere((m) => m.id == mapId);
+    await _storageService.saveMindMap(map.copyWith(folderId: folderId));
+    await loadAll();
+  }
+
   Future<void> deleteMindMap(String id) async {
     await _storageService.deleteMindMap(id);
     await loadAll();

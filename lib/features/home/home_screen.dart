@@ -8,9 +8,9 @@ import '../../models/node_style.dart';
 import '../canvas/canvas_screen.dart';
 import 'home_notifier.dart';
 
-// ── Folder name length: Korean=2 units, others=1, max=16 units (~8 Korean / ~16 English)
+// ── Name formatter: Korean=2 units, others=1, max 12 units (6 Korean / 12 English)
 class _FolderNameFormatter extends TextInputFormatter {
-  static const int _maxUnits = 16;
+  static const int _maxUnits = 12;
 
   static int _units(String text) {
     int u = 0;
@@ -23,8 +23,7 @@ class _FolderNameFormatter extends TextInputFormatter {
   @override
   TextEditingValue formatEditUpdate(
       TextEditingValue old, TextEditingValue next) {
-    if (_units(next.text) <= _maxUnits) return next;
-    return old;
+    return _units(next.text) <= _maxUnits ? next : old;
   }
 }
 
@@ -33,15 +32,14 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final homeState = ref.watch(homeProvider);
+    final state = ref.watch(homeProvider);
     final notifier = ref.read(homeProvider.notifier);
-    final focusedFolder = homeState.focusedFolderId != null
-        ? homeState.folders
-            .where((f) => f.id == homeState.focusedFolderId)
-            .firstOrNull
+
+    final focusedFolder = state.focusedFolderId != null
+        ? state.folders.where((f) => f.id == state.focusedFolderId).firstOrNull
         : null;
 
-    final allMaps = homeState.mindMaps.toList()
+    final allMaps = state.mindMaps.toList()
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final visibleMaps = focusedFolder != null
         ? allMaps.where((m) => m.folderId == focusedFolder.id).toList()
@@ -54,44 +52,67 @@ class HomeScreen extends ConsumerWidget {
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
-            onSelected: (value) => _onMenuSelected(context, ref, value, focusedFolder),
-            itemBuilder: (_) => _buildMenuItems(homeState, focusedFolder),
+            onSelected: (v) =>
+                _onMenuSelected(context, ref, v, focusedFolder, state),
+            itemBuilder: (_) => _buildMenuItems(state, focusedFolder),
           ),
         ],
       ),
-      body: homeState.isLoading
+      body: state.isLoading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
                 // ── Folders ───────────────────────────────────────────────
-                if (homeState.folders.isNotEmpty) ...[
+                if (state.folders.isNotEmpty) ...[
                   Wrap(
                     spacing: 10,
                     runSpacing: 10,
-                    children: homeState.folders.map((folder) {
-                      return _FolderTile(
-                        folder: folder,
-                        isFocused: homeState.focusedFolderId == folder.id,
-                        onTap: () => notifier.toggleFolderFocus(folder.id),
+                    children: state.folders.map((folder) {
+                      return DragTarget<MindMap>(
+                        onWillAcceptWithDetails: (d) =>
+                            d.data.folderId != folder.id,
+                        onAcceptWithDetails: (d) =>
+                            notifier.moveMapToFolder(d.data.id, folder.id),
+                        builder: (ctx, candidates, _) => _FolderTile(
+                          folder: folder,
+                          isFocused: state.focusedFolderId == folder.id,
+                          isDraggingOver: candidates.isNotEmpty,
+                          onTap: () => notifier.toggleFolderFocus(folder.id),
+                        ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 14),
-                  Divider(
-                    thickness: 2,
-                    color: Colors.grey.shade400,
-                  ),
+                  const Divider(thickness: 2, color: Color(0xFFB0B0B0)),
                   const SizedBox(height: 8),
                 ],
                 // ── Maps ──────────────────────────────────────────────────
                 if (visibleMaps.isEmpty)
                   _buildEmptyMaps(context)
                 else
-                  ...visibleMaps.map((map) => _MindMapCard(
-                        mindMap: map,
-                        onTap: () => _openCanvas(context, ref, map),
-                        onDelete: () => notifier.deleteMindMap(map.id),
+                  ...visibleMaps.map((map) => LongPressDraggable<MindMap>(
+                        data: map,
+                        hapticFeedbackOnStart: true,
+                        feedback: Material(
+                          elevation: 6,
+                          borderRadius: BorderRadius.circular(12),
+                          child: SizedBox(
+                            width: 300,
+                            child: _MindMapCard(
+                                mindMap: map, onTap: () {}, onDelete: () {}),
+                          ),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.35,
+                          child: _MindMapCard(
+                              mindMap: map, onTap: () {}, onDelete: () {}),
+                        ),
+                        child: _MindMapCard(
+                          mindMap: map,
+                          onTap: () => _openCanvas(context, ref, map),
+                          onDelete: () => notifier.deleteMindMap(map.id),
+                        ),
                       )),
               ],
             ),
@@ -106,12 +127,13 @@ class HomeScreen extends ConsumerWidget {
   // ── Menu ──────────────────────────────────────────────────────────────────
 
   List<PopupMenuEntry<String>> _buildMenuItems(
-      HomeState state, MindFolder? focusedFolder) {
-    if (focusedFolder != null) {
+      HomeState state, MindFolder? focused) {
+    final atMax = state.folders.length >= HomeNotifier.maxFolders;
+    if (focused != null) {
       return [
         const PopupMenuItem(value: 'rename', child: Text('폴더명 변경')),
         const PopupMenuItem(value: 'color', child: Text('폴더 색상 변경')),
-        if (focusedFolder.name != '기본')
+        if (focused.name != '기본')
           const PopupMenuItem(
             value: 'delete',
             child: Text('폴더 삭제', style: TextStyle(color: Colors.red)),
@@ -119,68 +141,60 @@ class HomeScreen extends ConsumerWidget {
         const PopupMenuDivider(),
         PopupMenuItem(
           value: 'create_folder',
-          enabled: state.folders.length < HomeNotifier.maxFolders,
+          enabled: !atMax,
           child: Text(
-            '폴더생성 (${state.folders.length}/${HomeNotifier.maxFolders})',
-          ),
+              '폴더생성 (${state.folders.length}/${HomeNotifier.maxFolders})'),
         ),
       ];
     }
     return [
       PopupMenuItem(
         value: 'create_folder',
-        enabled: state.folders.length < HomeNotifier.maxFolders,
+        enabled: !atMax,
         child: Text(
-          '폴더생성 (${state.folders.length}/${HomeNotifier.maxFolders})',
-        ),
+            '폴더생성 (${state.folders.length}/${HomeNotifier.maxFolders})'),
       ),
     ];
   }
 
   void _onMenuSelected(BuildContext context, WidgetRef ref, String value,
-      MindFolder? focusedFolder) {
+      MindFolder? focused, HomeState state) {
     switch (value) {
       case 'create_folder':
         _showCreateFolderDialog(context, ref);
       case 'rename':
-        if (focusedFolder != null) {
-          _showRenameFolderDialog(context, ref, focusedFolder);
-        }
+        if (focused != null) _showRenameFolderDialog(context, ref, focused);
       case 'color':
-        if (focusedFolder != null) {
-          _showColorPickerDialog(context, ref, focusedFolder);
-        }
+        if (focused != null) _showColorPickerDialog(context, ref, focused);
       case 'delete':
-        if (focusedFolder != null) {
-          _confirmDeleteFolder(context, ref, focusedFolder);
-        }
+        if (focused != null) _confirmDeleteFolder(context, ref, focused);
     }
   }
 
   // ── Dialogs ───────────────────────────────────────────────────────────────
 
   void _showCreateFolderDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
+    final ctrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('폴더생성'),
         content: TextField(
-          controller: controller,
+          controller: ctrl,
           autofocus: true,
           inputFormatters: [_FolderNameFormatter()],
           decoration: const InputDecoration(
             labelText: '폴더 이름',
-            hintText: '한글 최대 8자 / 영문 최대 16자',
+            hintText: '한글 최대 6자 / 영문 최대 12자',
           ),
-          onSubmitted: (_) => _createFolder(ctx, ref, controller.text),
+          onSubmitted: (_) => _createFolder(ctx, ref, ctrl.text),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('취소')),
           FilledButton(
-              onPressed: () => _createFolder(ctx, ref, controller.text),
+              onPressed: () => _createFolder(ctx, ref, ctrl.text),
               child: const Text('생성')),
         ],
       ),
@@ -195,28 +209,27 @@ class HomeScreen extends ConsumerWidget {
 
   void _showRenameFolderDialog(
       BuildContext context, WidgetRef ref, MindFolder folder) {
-    final controller = TextEditingController(text: folder.name);
+    final ctrl = TextEditingController(text: folder.name);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('폴더명 변경'),
         content: TextField(
-          controller: controller,
+          controller: ctrl,
           autofocus: true,
           inputFormatters: [_FolderNameFormatter()],
           decoration: const InputDecoration(
             labelText: '새 폴더 이름',
-            hintText: '한글 최대 8자 / 영문 최대 16자',
+            hintText: '한글 최대 6자 / 영문 최대 12자',
           ),
-          onSubmitted: (_) => _renameFolder(ctx, ref, folder.id, controller.text),
+          onSubmitted: (_) => _renameFolder(ctx, ref, folder.id, ctrl.text),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('취소')),
           FilledButton(
-              onPressed: () =>
-                  _renameFolder(ctx, ref, folder.id, controller.text),
+              onPressed: () => _renameFolder(ctx, ref, folder.id, ctrl.text),
               child: const Text('변경')),
         ],
       ),
@@ -241,30 +254,27 @@ class HomeScreen extends ConsumerWidget {
           child: Wrap(
             spacing: 12,
             runSpacing: 12,
-            children: NodeStyle.presetColors.map((colorValue) {
-              final isSelected = folder.colorValue == colorValue;
+            children: NodeStyle.presetColors.map((cv) {
+              final isSel = folder.colorValue == cv;
               return GestureDetector(
                 onTap: () {
                   Navigator.of(ctx).pop();
-                  ref
-                      .read(homeProvider.notifier)
-                      .updateFolderColor(folder.id, colorValue);
+                  ref.read(homeProvider.notifier).updateFolderColor(folder.id, cv);
                 },
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 150),
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: Color(colorValue),
+                    color: Color(cv),
                     shape: BoxShape.circle,
-                    border: isSelected
+                    border: isSel
                         ? Border.all(color: Colors.white, width: 3)
                         : null,
                     boxShadow: [
                       BoxShadow(
-                        color: Color(colorValue).withAlpha(80),
-                        blurRadius: isSelected ? 12 : 4,
-                      ),
+                          color: Color(cv).withAlpha(80),
+                          blurRadius: isSel ? 12 : 4)
                     ],
                   ),
                 ),
@@ -305,8 +315,6 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  // ── Navigation ────────────────────────────────────────────────────────────
-
   void _openCanvas(BuildContext context, WidgetRef ref, MindMap mindMap) {
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => CanvasScreen(mindMap: mindMap)))
@@ -314,26 +322,24 @@ class HomeScreen extends ConsumerWidget {
   }
 
   void _showCreateDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController();
+    final ctrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('New Mind Map'),
         content: TextField(
-          controller: controller,
+          controller: ctrl,
           autofocus: true,
           decoration: const InputDecoration(
-            labelText: 'Title',
-            hintText: 'e.g. Project Ideas',
-          ),
-          onSubmitted: (_) => _create(ctx, ref, controller.text),
+              labelText: 'Title', hintText: 'e.g. Project Ideas'),
+          onSubmitted: (_) => _create(ctx, ref, ctrl.text),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
               child: const Text('Cancel')),
           FilledButton(
-              onPressed: () => _create(ctx, ref, controller.text),
+              onPressed: () => _create(ctx, ref, ctrl.text),
               child: const Text('Create')),
         ],
       ),
@@ -344,12 +350,11 @@ class HomeScreen extends ConsumerWidget {
       BuildContext context, WidgetRef ref, String title) async {
     if (title.trim().isEmpty) return;
     Navigator.of(context).pop();
-    final mindMap =
+    final map =
         await ref.read(homeProvider.notifier).createMindMap(title.trim());
     if (context.mounted) {
       Navigator.of(context)
-          .push(MaterialPageRoute(
-              builder: (_) => CanvasScreen(mindMap: mindMap)))
+          .push(MaterialPageRoute(builder: (_) => CanvasScreen(mindMap: map)))
           .then((_) => ref.read(homeProvider.notifier).loadAll());
     }
   }
@@ -373,53 +378,64 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-// ── Compact Folder Tile ───────────────────────────────────────────────────────
+// ── Folder Tile ───────────────────────────────────────────────────────────────
 
 class _FolderTile extends StatelessWidget {
   final MindFolder folder;
   final bool isFocused;
+  final bool isDraggingOver;
   final VoidCallback onTap;
 
   const _FolderTile({
     required this.folder,
     required this.isFocused,
+    required this.isDraggingOver,
     required this.onTap,
   });
 
-  /// Returns a color with sufficient contrast against a very light background.
-  Color _accentColor() {
+  // Accent color for icon/text – ensure it's dark enough to read on light bg
+  Color _accent() {
     if (folder.colorValue != null) {
-      final base = Color(folder.colorValue!);
-      final lum = base.computeLuminance();
-      // If too light (e.g. yellow), darken it so it's visible on a white-ish bg
+      final c = Color(folder.colorValue!);
+      final lum = c.computeLuminance();
       if (lum > 0.5) {
-        final hsl = HSLColor.fromColor(base);
-        return hsl.withLightness(0.35).toColor();
+        return HSLColor.fromColor(c).withLightness(0.35).toColor();
       }
-      return base;
+      return c;
     }
-    return isFocused ? const Color(0xFF007AFF) : Colors.amber.shade700;
+    return Colors.amber.shade700;
   }
 
-  Color _bgColor() {
+  Color _bg() {
     if (folder.colorValue != null) {
       return Color(folder.colorValue!).withAlpha(22);
     }
-    return isFocused ? const Color(0xFFF0F6FF) : Colors.amber.shade50;
+    return Colors.amber.shade50;
   }
 
-  Color _tabColor() {
+  Color _tab() {
     if (folder.colorValue != null) {
       return Color(folder.colorValue!).withAlpha(55);
     }
-    return isFocused
-        ? const Color(0xFF007AFF).withAlpha(55)
-        : Colors.amber.shade200;
+    return Colors.amber.shade200;
   }
 
   @override
   Widget build(BuildContext context) {
-    final accent = _accentColor();
+    final accent = _accent();
+    // Border color: focused = blue gradient indicator, drag-over = green, default = subtle
+    Color borderColor;
+    double borderWidth;
+    if (isDraggingOver) {
+      borderColor = Colors.green.shade400;
+      borderWidth = 2.5;
+    } else if (isFocused) {
+      borderColor = const Color(0xFF007AFF);
+      borderWidth = 2.5;
+    } else {
+      borderColor = accent.withAlpha(60);
+      borderWidth = 1.0;
+    }
 
     return GestureDetector(
       onTap: onTap,
@@ -433,117 +449,67 @@ class _FolderTile extends StatelessWidget {
             height: 9,
             margin: const EdgeInsets.only(left: 6),
             decoration: BoxDecoration(
-              color: _tabColor(),
+              color: isDraggingOver
+                  ? Colors.green.shade200
+                  : isFocused
+                      ? const Color(0xFF007AFF).withAlpha(55)
+                      : _tab(),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(6),
                 topRight: Radius.circular(10),
               ),
             ),
           ),
-          // Body
-          _GradientBorderBox(
-            isActive: isFocused,
-            accentColor: accent,
-            borderRadius: const BorderRadius.only(
-              topRight: Radius.circular(12),
-              bottomLeft: Radius.circular(12),
-              bottomRight: Radius.circular(12),
+          // Body — border-only focus indicator, bg unchanged
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            width: 110,
+            padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+            decoration: BoxDecoration(
+              color: _bg(), // always same regardless of focus
+              borderRadius: const BorderRadius.only(
+                topRight: Radius.circular(12),
+                bottomLeft: Radius.circular(12),
+                bottomRight: Radius.circular(12),
+              ),
+              border: Border.all(color: borderColor, width: borderWidth),
+              boxShadow: isFocused
+                  ? [
+                      BoxShadow(
+                        color: const Color(0xFF007AFF).withAlpha(50),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      )
+                    ]
+                  : null,
             ),
-            child: Container(
-              width: 90,
-              padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
-              decoration: BoxDecoration(
-                color: _bgColor(),
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(11),
-                  bottomLeft: Radius.circular(11),
-                  bottomRight: Radius.circular(11),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isFocused
+                      ? Icons.folder_open_rounded
+                      : Icons.folder_rounded,
+                  color: accent,
+                  size: 32,
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    isFocused
-                        ? Icons.folder_open_rounded
-                        : Icons.folder_rounded,
+                const SizedBox(height: 6),
+                Text(
+                  folder.name,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight:
+                        isFocused ? FontWeight.w700 : FontWeight.w500,
                     color: accent,
-                    size: 32,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    folder.name,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight:
-                          isFocused ? FontWeight.w700 : FontWeight.w500,
-                      color: accent,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ── Gradient Border Box ───────────────────────────────────────────────────────
-
-class _GradientBorderBox extends StatelessWidget {
-  final Widget child;
-  final bool isActive;
-  final Color accentColor;
-  final BorderRadius borderRadius;
-
-  const _GradientBorderBox({
-    required this.child,
-    required this.isActive,
-    required this.accentColor,
-    required this.borderRadius,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (!isActive) {
-      return Container(
-        decoration: BoxDecoration(
-          borderRadius: borderRadius,
-          border: Border.all(
-              color: accentColor.withAlpha(80), width: 1),
-        ),
-        child: child,
-      );
-    }
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [accentColor, Color.lerp(accentColor, const Color(0xFF5856D6), 0.5)!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: borderRadius,
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withAlpha(70),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(2),
-      child: ClipRRect(
-        borderRadius: BorderRadius.only(
-          topRight: Radius.circular(borderRadius.topRight.x - 2),
-          bottomLeft: Radius.circular(borderRadius.bottomLeft.x - 2),
-          bottomRight: Radius.circular(borderRadius.bottomRight.x - 2),
-        ),
-        child: child,
       ),
     );
   }
@@ -581,8 +547,8 @@ class _MindMapCard extends StatelessWidget {
               color: Color(0xFF007AFF), size: 20),
         ),
         title: Text(mindMap.title,
-            style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            style: const TextStyle(
+                fontWeight: FontWeight.w600, fontSize: 14)),
         subtitle: Text(
           '${mindMap.nodes.length} nodes · $dateStr',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
