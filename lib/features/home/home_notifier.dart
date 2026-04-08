@@ -13,12 +13,14 @@ class HomeState {
   final List<MindFolder> folders;
   final List<MindMap> mindMaps;
   final String? focusedFolderId;
+  final String? focusedMapId;
   final bool isLoading;
 
   const HomeState({
     this.folders = const [],
     this.mindMaps = const [],
     this.focusedFolderId,
+    this.focusedMapId,
     this.isLoading = false,
   });
 
@@ -27,12 +29,15 @@ class HomeState {
     List<MindMap>? mindMaps,
     String? focusedFolderId,
     bool clearFocus = false,
+    String? focusedMapId,
+    bool clearMapFocus = false,
     bool? isLoading,
   }) {
     return HomeState(
       folders: folders ?? this.folders,
       mindMaps: mindMaps ?? this.mindMaps,
       focusedFolderId: clearFocus ? null : (focusedFolderId ?? this.focusedFolderId),
+      focusedMapId: clearMapFocus ? null : (focusedMapId ?? this.focusedMapId),
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -72,9 +77,17 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
   void toggleFolderFocus(String folderId) {
     if (state.focusedFolderId == folderId) {
-      state = state.copyWith(clearFocus: true);
+      state = state.copyWith(clearFocus: true, clearMapFocus: true);
     } else {
-      state = state.copyWith(focusedFolderId: folderId);
+      state = state.copyWith(focusedFolderId: folderId, clearMapFocus: true);
+    }
+  }
+
+  void toggleMapFocus(String mapId) {
+    if (state.focusedMapId == mapId) {
+      state = state.copyWith(clearMapFocus: true);
+    } else {
+      state = state.copyWith(focusedMapId: mapId);
     }
   }
 
@@ -157,6 +170,9 @@ class HomeNotifier extends StateNotifier<HomeState> {
 
   Future<void> deleteMindMap(String id) async {
     await _storageService.deleteMindMap(id);
+    if (state.focusedMapId == id) {
+      state = state.copyWith(clearMapFocus: true);
+    }
     await loadAll();
   }
 }
