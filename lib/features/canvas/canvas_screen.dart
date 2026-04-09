@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3, Matrix4;
 import '../../models/mind_map.dart';
 import '../../models/mind_node.dart';
+import '../../services/file_service.dart';
 import '../../shared/constants.dart';
 import 'canvas_notifier.dart';
 import 'canvas_painter.dart';
@@ -111,6 +114,17 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                     tooltip: 'Save',
                     onPressed: () => notifier.save(),
                   ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'export') {
+                      _exportMap(context, canvasState.mindMap);
+                    }
+                  },
+                  itemBuilder: (_) => const [
+                    PopupMenuItem(
+                        value: 'export', child: Text('내보내기 (JSON)')),
+                  ],
+                ),
               ],
             ),
           ),
@@ -262,9 +276,38 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
     return null;
   }
 
+  Future<void> _exportMap(BuildContext context, MindMap map) async {
+    try {
+      final jsonStr = jsonEncode(map.toJson());
+      final safeTitle = map.title.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_');
+      final timestamp = DateFormat('yyyyMMddHHmmss').format(DateTime.now());
+      final fileName = '${safeTitle}_${timestamp}_map.json';
+      await downloadJsonFile(jsonStr, fileName);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"$fileName" 저장됨'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('내보내기 실패'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _showRenameDialog(BuildContext context, CanvasNotifier notifier,
       String nodeId, String currentText) {
-    final ctrl = TextEditingController(text: currentText);
+    final ctrl = TextEditingController(); // empty — current name shown as hint
     showDialog(
       context: context,
       barrierColor: Colors.transparent,
@@ -294,8 +337,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                     child: TextField(
                       controller: ctrl,
                       autofocus: true,
-                      decoration: const InputDecoration(
-                        hintText: '노드명 입력',
+                      decoration: InputDecoration(
+                        hintText: currentText, // current name shown as ghost
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,

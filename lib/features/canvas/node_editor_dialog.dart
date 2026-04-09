@@ -27,7 +27,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
   @override
   void initState() {
     super.initState();
-    _textController = TextEditingController(text: widget.node.text);
+    _textController = TextEditingController(); // empty; current name shown as hint
     _style = widget.node.style;
   }
 
@@ -73,6 +73,7 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                     maxLines: 3,
                     decoration: InputDecoration(
                       labelText: 'Node Text',
+                      hintText: widget.node.text, // current name as ghost text
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12)),
                       filled: true,
@@ -164,7 +165,10 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                       FilledButton(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          widget.onSave(_textController.text.trim(), _style);
+                          final text = _textController.text.trim().isEmpty
+                              ? widget.node.text
+                              : _textController.text.trim();
+                          widget.onSave(text, _style);
                         },
                         style: FilledButton.styleFrom(
                           backgroundColor: const Color(0xFF007AFF),
