@@ -60,7 +60,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
     if (event.logicalKey == LogicalKeyboardKey.enter) {
       if (!mounted) return false;
       final notifier = ref.read(canvasProvider(widget.mindMap).notifier);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() {
         if (mounted) {
           _showRenameDialog(context, notifier, selectedNode.id, selectedNode.text);
         }
@@ -71,7 +71,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
     if (event.logicalKey == LogicalKeyboardKey.keyE) {
       if (!mounted) return false;
       final notifier = ref.read(canvasProvider(widget.mindMap).notifier);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.microtask(() {
         if (mounted) _showNodeEditor(context, notifier, selectedNode);
       });
       return true;
@@ -380,6 +380,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                     child: TextField(
                       controller: ctrl,
                       autofocus: true,
+                      textInputAction: TextInputAction.done,
                       decoration: InputDecoration(
                         hintText: currentText,
                         hintStyle: TextStyle(color: Colors.grey.shade300),
@@ -388,9 +389,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                         contentPadding: EdgeInsets.zero,
                       ),
                       onSubmitted: (v) {
-                        if (v.trim().isNotEmpty) {
-                          notifier.updateNodeText(nodeId, v.trim());
-                        }
+                        final text = v.trim().isEmpty ? currentText : v.trim();
+                        notifier.updateNodeText(nodeId, text);
                         Navigator.of(ctx).pop();
                       },
                     ),
@@ -399,9 +399,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                     icon: const Icon(Icons.check_circle,
                         color: Color(0xFF007AFF)),
                     onPressed: () {
-                      if (ctrl.text.trim().isNotEmpty) {
-                        notifier.updateNodeText(nodeId, ctrl.text.trim());
-                      }
+                      final text = ctrl.text.trim().isEmpty
+                          ? currentText
+                          : ctrl.text.trim();
+                      notifier.updateNodeText(nodeId, text);
                       Navigator.of(ctx).pop();
                     },
                   ),
