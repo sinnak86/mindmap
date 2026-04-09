@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3, Matrix4;
@@ -27,6 +28,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   final TransformationController _transformController =
       TransformationController();
   final GlobalKey _repaintKey = GlobalKey();
+  final FocusNode _canvasFocusNode = FocusNode();
 
   String? _dragNodeId;
   Timer? _saveTransformTimer;
@@ -35,7 +37,10 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   void initState() {
     super.initState();
     _transformController.addListener(_onTransformChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _restoreOrCenterView());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _restoreOrCenterView();
+      _canvasFocusNode.requestFocus();
+    });
   }
 
   void _onTransformChanged() {
@@ -79,6 +84,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   void dispose() {
     _saveTransformTimer?.cancel();
     _transformController.removeListener(_onTransformChanged);
+    _canvasFocusNode.dispose();
     _transformController.dispose();
     super.dispose();
   }
@@ -130,7 +136,29 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
           ),
         ),
       ),
-      body: Container(
+      body: Focus(
+        focusNode: _canvasFocusNode,
+        autofocus: true,
+        onKeyEvent: (_, event) {
+          if (event is! KeyDownEvent) return KeyEventResult.ignored;
+          final selectedId = canvasState.selectedNodeId;
+          if (selectedId == null) return KeyEventResult.ignored;
+          final selectedNode = canvasState.mindMap.nodes
+              .where((n) => n.id == selectedId)
+              .firstOrNull;
+          if (selectedNode == null) return KeyEventResult.ignored;
+
+          if (event.logicalKey == LogicalKeyboardKey.enter) {
+            _showRenameDialog(context, notifier, selectedNode.id, selectedNode.text);
+            return KeyEventResult.handled;
+          }
+          if (event.logicalKey == LogicalKeyboardKey.keyE) {
+            _showNodeEditor(context, notifier, selectedNode);
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -159,6 +187,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                           canvasState.connectingFromNodeId!, tappedNode.id);
                     } else {
                       notifier.selectNode(tappedNode.id);
+                      _canvasFocusNode.requestFocus();
                     }
                   } else {
                     notifier.deselectAll();
@@ -227,6 +256,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
             ],
           ),
         ),
+        ), // Focus
       ),
       floatingActionButton: ToolbarWidget(
         mindMap: widget.mindMap,
@@ -338,7 +368,8 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
                       controller: ctrl,
                       autofocus: true,
                       decoration: InputDecoration(
-                        hintText: currentText, // current name shown as ghost
+                        hintText: currentText,
+                        hintStyle: TextStyle(color: Colors.grey.shade300),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,

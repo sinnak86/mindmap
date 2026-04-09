@@ -73,7 +73,8 @@ class _NodeEditorDialogState extends State<NodeEditorDialog> {
                     maxLines: 3,
                     decoration: InputDecoration(
                       labelText: 'Node Text',
-                      hintText: widget.node.text, // current name as ghost text
+                      hintText: widget.node.text,
+                      hintStyle: TextStyle(color: Colors.grey.shade300),
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12)),
                       filled: true,
