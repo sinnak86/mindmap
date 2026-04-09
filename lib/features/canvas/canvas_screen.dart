@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:vector_math/vector_math_64.dart' show Vector3, Matrix4;
@@ -36,48 +35,7 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   void initState() {
     super.initState();
     _transformController.addListener(_onTransformChanged);
-    HardwareKeyboard.instance.addHandler(_handleKeyEvent);
     WidgetsBinding.instance.addPostFrameCallback((_) => _restoreOrCenterView());
-  }
-
-  /// Global keyboard handler — fires regardless of which widget has focus.
-  /// Guarded so it won't trigger while a text field is active (e.g. rename dialog).
-  bool _handleKeyEvent(KeyEvent event) {
-    if (event is! KeyDownEvent) return false;
-
-    // Don't intercept if user is typing in a text field
-    final primary = FocusManager.instance.primaryFocus;
-    if (primary?.context?.widget is EditableText) return false;
-
-    final canvasState = ref.read(canvasProvider(widget.mindMap));
-    final selectedId = canvasState.selectedNodeId;
-    if (selectedId == null) return false;
-
-    final selectedNode =
-        canvasState.mindMap.nodes.where((n) => n.id == selectedId).firstOrNull;
-    if (selectedNode == null) return false;
-
-    if (event.logicalKey == LogicalKeyboardKey.enter) {
-      if (!mounted) return false;
-      final notifier = ref.read(canvasProvider(widget.mindMap).notifier);
-      Future.microtask(() {
-        if (mounted) {
-          _showRenameDialog(context, notifier, selectedNode.id, selectedNode.text);
-        }
-      });
-      return true;
-    }
-
-    if (event.logicalKey == LogicalKeyboardKey.keyE) {
-      if (!mounted) return false;
-      final notifier = ref.read(canvasProvider(widget.mindMap).notifier);
-      Future.microtask(() {
-        if (mounted) _showNodeEditor(context, notifier, selectedNode);
-      });
-      return true;
-    }
-
-    return false;
   }
 
   void _onTransformChanged() {
@@ -121,7 +79,6 @@ class _CanvasScreenState extends ConsumerState<CanvasScreen> {
   void dispose() {
     _saveTransformTimer?.cancel();
     _transformController.removeListener(_onTransformChanged);
-    HardwareKeyboard.instance.removeHandler(_handleKeyEvent);
     _transformController.dispose();
     super.dispose();
   }
